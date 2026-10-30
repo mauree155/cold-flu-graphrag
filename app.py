@@ -1,3 +1,5 @@
+import html
+import re
 import time
 import numpy as np
 import streamlit as st
@@ -19,35 +21,50 @@ st.markdown("""
 html, body, [data-testid="stAppViewContainer"], [data-testid="stMarkdownContainer"],
 button, textarea, input { font-family: 'Atkinson Hyperlegible', sans-serif !important; }
 #MainMenu, footer { visibility: hidden; }
-.block-container { max-width: 1100px; padding-top: 2.5rem; }
+.block-container { max-width: 1080px; padding-top: 2.2rem; }
 
-.hero h1 { font-size: 2.6rem; font-weight: 700; color: #1C2420; margin: 0 0 .3rem; line-height: 1.1; }
-.hero .lede { font-size: 1.15rem; color: #3E4A44; max-width: 62ch; margin: 0 0 1.2rem; line-height: 1.5; }
-.chain { display: flex; flex-wrap: wrap; align-items: center; gap: .45rem; margin: .4rem 0 .4rem; }
-.chain .node { background: #FFFFFF; border: 1.5px solid #0E6B4F; color: #0E6B4F;
-  border-radius: 999px; padding: .3rem .85rem; font-weight: 700; font-size: .95rem; }
-.chain .node.risk { border-color: #B3261E; color: #B3261E; }
-.chain .edge { font-size: .9rem; color: #5B6770; font-style: italic; }
-.chain-note { font-size: .95rem; color: #5B6770; margin: 0 0 1.4rem; }
-.notice { border-left: 4px solid #B26B00; background: #FFF8EC; padding: .75rem 1rem;
-  color: #5A3A00; border-radius: 4px; margin-bottom: 1.6rem; }
+.hero h1 { font-size: 2.4rem; font-weight: 700; color: #1C2420; margin: 0 0 .2rem; line-height: 1.1; }
+.hero p { font-size: 1.1rem; color: #3E4A44; margin: 0 0 1.2rem; }
+.try { font-size: .95rem; color: #5B6770; margin: .2rem 0 .3rem; }
+.notice { border-left: 4px solid #B26B00; background: #FFF8EC; padding: .55rem .9rem;
+  color: #5A3A00; border-radius: 4px; margin: .8rem 0 1.4rem; font-size: .95rem; }
+.asked { background: #E6ECE9; border-radius: 6px; padding: .6rem .9rem; color: #2E3A34;
+  margin: .4rem 0 1rem; font-size: .98rem; }
+.asked strong { color: #1C2420; }
+
+div[data-testid="stFormSubmitButton"] button { width: 100%; }
+button[data-testid^="stBaseButton-primary"] { background: #0E6B4F; border-color: #0E6B4F;
+  color: #FFFFFF; border-radius: 6px; font-weight: 700; }
+button[data-testid="stBaseButton-secondary"] { border-radius: 999px; border: 1.5px solid #0E6B4F;
+  color: #0E6B4F; background: #FFFFFF; font-weight: 700; padding: .2rem .9rem; }
+button:focus-visible { outline: 3px solid #B26B00 !important; outline-offset: 2px; }
 
 .st-key-rag_panel, .st-key-kg_panel { background: #FFFFFF; border: 1.5px solid #CBD5D0;
-  border-radius: 6px; padding: 1rem 1.2rem 1rem; }
+  border-radius: 6px; padding: 1rem 1.2rem; }
 .st-key-kg_panel { border-color: #0E6B4F; box-shadow: 0 0 0 3px rgba(14,107,79,.08); }
 .label-head { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem;
-  padding-bottom: .6rem; margin-bottom: .8rem; border-bottom: 1.5px dashed #CBD5D0; }
-.label-head .name { font-weight: 700; font-size: 1.3rem; color: #1C2420; }
+  padding-bottom: .55rem; margin-bottom: .8rem; border-bottom: 1.5px dashed #CBD5D0; }
+.label-head .name { font-weight: 700; font-size: 1.25rem; color: #1C2420; }
 .st-key-kg_panel .label-head .name { color: #0E6B4F; }
-.label-head .what { font-size: .9rem; color: #5B6770; }
-.label-foot { margin-top: .8rem; padding-top: .6rem; border-top: 1.5px dashed #CBD5D0;
+.label-head .what { font-size: .88rem; color: #5B6770; }
+.label-foot { margin-top: .8rem; padding-top: .55rem; border-top: 1.5px dashed #CBD5D0;
   font-size: .85rem; color: #5B6770; }
 
-button[data-testid="stBaseButton-secondary"] { border-radius: 999px; border: 1.5px solid #0E6B4F;
-  color: #0E6B4F; background: #FFFFFF; font-weight: 700; }
-button[data-testid="stBaseButton-primary"] { background: #0E6B4F; border-color: #0E6B4F;
-  color: #FFFFFF; border-radius: 6px; font-weight: 700; }
-button:focus-visible { outline: 3px solid #B26B00 !important; outline-offset: 2px; }
+.verdict { display: flex; gap: .7rem; align-items: flex-start; margin: 0 0 .65rem; line-height: 1.45; }
+.badge { flex: 0 0 4.8rem; text-align: center; font-weight: 700; font-size: .85rem;
+  border-radius: 4px; padding: .12rem 0; margin-top: .1rem; }
+.badge.avoid { background: #FBEAE9; color: #B3261E; border: 1px solid #E8B4B0; }
+.badge.caution { background: #FFF4E0; color: #8A5300; border: 1px solid #F0D3A0; }
+.badge.ok { background: #E3F2EC; color: #0E6B4F; border: 1px solid #A9D5C4; }
+.missing { color: #5B6770; font-style: italic; margin-top: .3rem; }
+
+.how h3 { font-size: 1.15rem; margin: 2rem 0 .5rem; color: #1C2420; }
+.chain { display: flex; flex-wrap: wrap; align-items: center; gap: .45rem; margin: .3rem 0 .4rem; }
+.chain .node { background: #FFFFFF; border: 1.5px solid #0E6B4F; color: #0E6B4F;
+  border-radius: 999px; padding: .28rem .8rem; font-weight: 700; font-size: .92rem; }
+.chain .node.risk { border-color: #B3261E; color: #B3261E; }
+.chain .edge { font-size: .88rem; color: #5B6770; font-style: italic; }
+.how p { color: #3E4A44; max-width: 70ch; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -148,12 +165,14 @@ def check_combination(product_a: str, product_b: str) -> list:
 CONDITION_QUERY = """
 MATCH (p:Product)-[:CONTAINS]->(i:Ingredient)-[r:CONTRAINDICATED_IN|CAUTION_IN]->(c:Condition)
 WHERE toLower(c.name) CONTAINS toLower($condition)
-RETURN p.name AS product, 'ingredient: ' + i.name AS via, type(r) AS link, r.detail AS detail,
+RETURN p.name AS product, 'ingredient: ' + i.name AS via, type(r) AS link,
+  r.detail + CASE WHEN r.confidence <> 'high' THEN ' (not fully confirmed, check the leaflet)' ELSE '' END AS detail,
   r.confidence AS confidence, r.verified AS verified, r.source AS source
 UNION
 MATCH (p:Product)-[r:CONTRAINDICATED_IN|CAUTION_IN]->(c:Condition)
 WHERE toLower(c.name) CONTAINS toLower($condition)
-RETURN p.name AS product, 'product leaflet' AS via, type(r) AS link, r.detail AS detail,
+RETURN p.name AS product, 'product leaflet' AS via, type(r) AS link,
+  r.detail + CASE WHEN r.confidence <> 'high' THEN ' (not fully confirmed, check the leaflet)' ELSE '' END AS detail,
   r.confidence AS confidence, r.verified AS verified, r.source AS source
 """
 
@@ -262,25 +281,25 @@ def retrieve(question, k=3):
 
 STYLE = (
     "Answer directly and concisely in plain English. Never mention 'the documents', 'the knowledge graph', "
-    "'the tools' or 'the leaflet'; just state the facts. When covering several products, give one short "
-    "bullet per product with the verdict first, for example: 'Lemsip Max Cold & Flu Lemon: avoid. Contains "
-    "phenylephrine, which is contraindicated in high blood pressure.' Do not add a medical disclaimer, "
-    "because the page already shows one."
+    "'the tools' or 'the leaflet'; just state the facts. When the answer covers products, write one bullet "
+    "per product in exactly this format: '- **Product name**: Avoid. Short reason.' The verdict must be "
+    "Avoid, Caution or OK. For a question about a single fact, answer in one or two short sentences instead. "
+    "Do not add a medical disclaimer, because the page already shows one."
 )
 
 RAG_CONFIG = types.GenerateContentConfig(system_instruction=(
     "You answer questions about UK cold and flu products using only the information provided. "
-    "If information about a product is missing, end with one line: 'No information found for: ...' "
-    + STYLE))
+    "If information about a product the user asked about is missing, end with one line: "
+    "'No information found for: ...' " + STYLE))
 
 RAG_KG_CONFIG = types.GenerateContentConfig(tools=GRAPH_TOOLS, system_instruction=(
     "You answer questions about UK cold and flu products. Always use the graph tools, and also use the "
-    "information provided. If they conflict, follow the more cautious official wording and say so in a few words. "
+    "information provided. If they conflict, follow the more cautious official wording. "
     "If neither has the answer, say so. If a product is withdrawn, say so clearly. "
     "If products share paracetamol, follow each product's own instruction: most say do not take with other "
     "paracetamol products; only apply dose spacing where a product's own dose_note allows it. "
-    "Add '(not fully confirmed, check the leaflet)' after any medium or low confidence fact. "
-    + STYLE))
+    "Keep '(not fully confirmed, check the leaflet)' wherever it appears in the data, and add it after any "
+    "other medium or low confidence fact. " + STYLE))
 
 def generate(contents, cfg):
     last_error = "unknown error"
@@ -309,104 +328,137 @@ def tools_used(resp):
 def format_docs(docs):
     return "\n\n".join(f"[{d['title']}] {d['text']}" for d in docs)
 
-def label_head(name, what):
-    st.markdown(f'<div class="label-head"><span class="name">{name}</span>'
-                f'<span class="what">{what}</span></div>', unsafe_allow_html=True)
+# ---------- Rendering helpers ----------
 
-def label_foot(model):
-    st.markdown(f'<div class="label-foot">Answered by {model}. Not medical advice.</div>',
-                unsafe_allow_html=True)
+VERDICT_LINE = re.compile(r"^\s*[\*\-]\s+\*\*(.+?)\*\*\s*:?\s*(Avoid|Caution|OK)\b[\.:]?\s*(.*)$", re.IGNORECASE)
+
+def render_answer(text):
+    out = []
+    for line in text.splitlines():
+        m = VERDICT_LINE.match(line)
+        if m:
+            product = html.escape(m.group(1).strip().rstrip(":"))
+            word = m.group(2).lower()
+            verdict = "OK" if word == "ok" else word.capitalize()
+            reason = html.escape(m.group(3).replace("**", "").strip())
+            out += ["", f'<div class="verdict"><span class="badge {word}">{verdict}</span>'
+                        f'<span><strong>{product}</strong> {reason}</span></div>', ""]
+        elif line.strip().lower().startswith("no information found"):
+            out += ["", f'<div class="missing">{html.escape(line.strip())}</div>', ""]
+        else:
+            out.append(line)
+    st.markdown("\n".join(out), unsafe_allow_html=True)
+
+def render_panel(key, name, what, result, expander_title):
+    with st.container(key=key):
+        st.markdown(f'<div class="label-head"><span class="name">{name}</span>'
+                    f'<span class="what">{what}</span></div>', unsafe_allow_html=True)
+        if result["text"] is None:
+            st.error("The AI service is busy. Wait a minute, then ask again.")
+            return
+        render_answer(result["text"])
+        with st.expander(expander_title):
+            for d in result["docs"]:
+                st.markdown(f"* [{d['title']}]({d['source']})")
+            for call in result.get("calls", []):
+                st.code(call, language="python")
+        st.markdown(f'<div class="label-foot">Answered by {result["model"]}. Not medical advice.</div>',
+                    unsafe_allow_html=True)
+
+def run_comparison(question):
+    docs = retrieve(question)
+    prompt = f"Information:\n{format_docs(docs)}\n\nQuestion: {question}"
+    rag_resp, rag_model = generate(prompt, RAG_CONFIG)
+    kg_resp, kg_model = generate(prompt, RAG_KG_CONFIG)
+    return {
+        "question": question,
+        "rag": {"text": rag_resp.text if rag_resp else None, "model": rag_model, "docs": docs},
+        "kg": {"text": kg_resp.text if kg_resp else None, "model": kg_model, "docs": docs,
+               "calls": tools_used(kg_resp) if kg_resp else []},
+    }
 
 # ---------- Page ----------
 
 st.markdown("""
 <div class="hero">
   <h1>Cold and Flu Checker</h1>
-  <p class="lede">Ask one question about common UK cold and flu remedies. Two assistants answer it
-  side by side, so you can see what a knowledge graph adds to plain document search.</p>
+  <p>Ask about common UK cold and flu remedies and compare two AI assistants side by side.</p>
 </div>
-<div class="chain">
-  <span class="node">Lemsip Max Cold &amp; Flu</span>
-  <span class="edge">contains</span>
-  <span class="node risk">Paracetamol</span>
-  <span class="edge">also in</span>
-  <span class="node">Beechams All in One</span>
-</div>
-<p class="chain-note">Each leaflet only describes its own product. The graph connects them.</p>
-<div class="notice">Educational demo only, not medical advice. Always read the product leaflet and speak
-to a pharmacist or doctor before taking any medicine.</div>
 """, unsafe_allow_html=True)
 
 EXAMPLES = [
-    ("I've already had paracetamol", "I've taken paracetamol today. Which of these products should I not take as well: Lemsip Max Cold & Flu, Lemsip Cold & Flu, Beechams All in One, Night Nurse, Nurofen Cold & Flu, Sudafed Decongestant?"),
-    ("I have high blood pressure", "I have high blood pressure. Which of these products should I avoid: Lemsip Max Cold & Flu, Lemsip Cold & Flu, Beechams All in One, Night Nurse, Nurofen Cold & Flu, Sudafed Decongestant?"),
-    ("Which ones make me drowsy?", "Which of these products will make me drowsy: Lemsip Max Cold & Flu, Lemsip Cold & Flu, Beechams All in One, Night Nurse, Nurofen Cold & Flu, Sudafed Decongestant?"),
+    ("I've had paracetamol", "I've taken paracetamol today. Which of these products should I not take as well: Lemsip Max Cold & Flu, Lemsip Cold & Flu, Beechams All in One, Night Nurse, Nurofen Cold & Flu, Sudafed Decongestant?"),
+    ("High blood pressure", "I have high blood pressure. Which of these products should I avoid: Lemsip Max Cold & Flu, Lemsip Cold & Flu, Beechams All in One, Night Nurse, Nurofen Cold & Flu, Sudafed Decongestant?"),
+    ("Which make me drowsy?", "Which of these products will make me drowsy: Lemsip Max Cold & Flu, Lemsip Cold & Flu, Beechams All in One, Night Nurse, Nurofen Cold & Flu, Sudafed Decongestant?"),
 ]
 
 if "count" not in st.session_state:
     st.session_state.count = 0
+if "result" not in st.session_state:
+    st.session_state.result = None
 
 run_question = None
-st.markdown("**Try one of these**")
-example_cols = st.columns(len(EXAMPLES))
-for col, (label, q) in zip(example_cols, EXAMPLES):
+
+with st.form("ask", border=False):
+    c1, c2 = st.columns([5, 1], vertical_alignment="bottom")
+    typed = c1.text_input("Your question", max_chars=500, label_visibility="collapsed",
+                          placeholder="Ask about these cold and flu products, for example: Can I take Nurofen Cold & Flu with Sudafed?")
+    if c2.form_submit_button("Compare", type="primary") and typed.strip():
+        run_question = typed.strip()
+
+st.markdown('<p class="try">Or try one of these:</p>', unsafe_allow_html=True)
+chip_cols = st.columns([1, 1, 1, 2])
+for col, (label, q) in zip(chip_cols, EXAMPLES):
     if col.button(label, key=f"ex_{label}"):
         run_question = q
 
-typed = st.text_area("Or ask your own question", max_chars=500, height=80,
-                     placeholder="For example: Can I take Nurofen Cold & Flu and Sudafed together?")
-if st.button("Compare answers", type="primary") and typed.strip():
-    run_question = typed.strip()
+st.markdown('<div class="notice">Educational demo only, not medical advice. Always read the product '
+            'leaflet and speak to a pharmacist or doctor before taking any medicine.</div>',
+            unsafe_allow_html=True)
 
 if run_question:
     if st.session_state.count >= MAX_QUESTIONS:
         st.info("You've reached the 10 question limit for this visit. Refresh the page later to ask more.")
     else:
         st.session_state.count += 1
-        st.markdown(f"#### {run_question}")
-        try:
-            docs = retrieve(run_question)
-        except Exception:
-            st.error("The search service is busy. Wait a minute, then ask again.")
-            st.stop()
-        prompt = f"Information:\n{format_docs(docs)}\n\nQuestion: {run_question}"
-        left, right = st.columns(2, gap="large")
+        with st.spinner("Asking both assistants..."):
+            try:
+                st.session_state.result = run_comparison(run_question)
+            except Exception:
+                st.session_state.result = None
+                st.error("The search service is busy. Wait a minute, then ask again.")
 
-        with left:
-            with st.container(key="rag_panel"):
-                label_head("LLM + RAG", "Product documents only")
-                with st.spinner("Searching documents..."):
-                    resp, model = generate(prompt, RAG_CONFIG)
-                if resp is None:
-                    st.error("The AI service is busy. Wait a minute, then ask again.")
-                else:
-                    st.markdown(resp.text)
-                    with st.expander("What it read"):
-                        for d in docs:
-                            st.markdown(f"* [{d['title']}]({d['source']})")
-                    label_foot(model)
+result = st.session_state.result
+if result:
+    st.markdown(f'<div class="asked"><strong>Your question:</strong> {html.escape(result["question"])}</div>',
+                unsafe_allow_html=True)
+    left, right = st.columns(2, gap="large")
+    with left:
+        render_panel("rag_panel", "LLM + RAG", "Product documents only", result["rag"], "What it read")
+    with right:
+        render_panel("kg_panel", "LLM + RAG + KG", "Documents plus knowledge graph", result["kg"],
+                     "What it read and queried")
 
-        with right:
-            with st.container(key="kg_panel"):
-                label_head("LLM + RAG + KG", "Documents plus knowledge graph")
-                with st.spinner("Searching documents and graph..."):
-                    resp, model = generate(prompt, RAG_KG_CONFIG)
-                if resp is None:
-                    st.error("The AI service is busy. Wait a minute, then ask again.")
-                else:
-                    st.markdown(resp.text)
-                    with st.expander("What it read and queried"):
-                        for d in docs:
-                            st.markdown(f"* [{d['title']}]({d['source']})")
-                        for call in tools_used(resp):
-                            st.code(call, language="python")
-                    label_foot(model)
+st.markdown("""
+<div class="how">
+  <h3>How it works</h3>
+  <div class="chain">
+    <span class="node">Lemsip Max Cold &amp; Flu</span>
+    <span class="edge">contains</span>
+    <span class="node risk">Paracetamol</span>
+    <span class="edge">also in</span>
+    <span class="node">Beechams All in One</span>
+  </div>
+  <p>Each product leaflet only describes its own product. Both assistants search the same leaflets, but the
+  right hand one can also follow a knowledge graph that links products to ingredients and ingredients to
+  warnings, so it can spot risks that sit across several leaflets.</p>
+</div>
+""", unsafe_allow_html=True)
 
 with st.expander("About this demo"):
     st.markdown(
         "Both assistants use the same Gemini model and receive the same three retrieved documents. "
-        "The only difference is that the right hand assistant can also query a knowledge graph linking "
-        "products to ingredients, and ingredients to warnings.\n\n"
+        "The only difference is the knowledge graph.\n\n"
         "**Products covered:** Lemsip Max Cold & Flu Lemon, Lemsip Cold & Flu Lemon, Beechams All in One "
         "(oral solution), Night Nurse, Nurofen Cold & Flu, Sudafed Decongestant Tablets, Paracetamol 500mg "
         "Tablets, Ibuprofen 200mg Tablets, and the withdrawn Day Nurse Capsules.\n\n"
