@@ -5,13 +5,51 @@ from neo4j import GraphDatabase
 from google import genai
 from google.genai import types
 
-st.set_page_config(page_title="Cold and Flu GraphRAG", page_icon="💊", layout="wide")
+st.set_page_config(page_title="Cold and Flu Checker", page_icon="💊", layout="wide")
 
 MODELS = ["gemini-3.1-flash-lite", "gemini-2.5-flash"]
 EMBED_MODELS = ["gemini-embedding-001", "text-embedding-004"]
 MAX_QUESTIONS = 10
-ENDING = (" End every answer with: 'This is an educational demo, not medical advice. "
-          "Please speak to a pharmacist or doctor.'")
+
+# ---------- Look and feel ----------
+
+st.markdown("""
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&display=swap');
+html, body, [data-testid="stAppViewContainer"], [data-testid="stMarkdownContainer"],
+button, textarea, input { font-family: 'Atkinson Hyperlegible', sans-serif !important; }
+#MainMenu, footer { visibility: hidden; }
+.block-container { max-width: 1100px; padding-top: 2.5rem; }
+
+.hero h1 { font-size: 2.6rem; font-weight: 700; color: #1C2420; margin: 0 0 .3rem; line-height: 1.1; }
+.hero .lede { font-size: 1.15rem; color: #3E4A44; max-width: 62ch; margin: 0 0 1.2rem; line-height: 1.5; }
+.chain { display: flex; flex-wrap: wrap; align-items: center; gap: .45rem; margin: .4rem 0 .4rem; }
+.chain .node { background: #FFFFFF; border: 1.5px solid #0E6B4F; color: #0E6B4F;
+  border-radius: 999px; padding: .3rem .85rem; font-weight: 700; font-size: .95rem; }
+.chain .node.risk { border-color: #B3261E; color: #B3261E; }
+.chain .edge { font-size: .9rem; color: #5B6770; font-style: italic; }
+.chain-note { font-size: .95rem; color: #5B6770; margin: 0 0 1.4rem; }
+.notice { border-left: 4px solid #B26B00; background: #FFF8EC; padding: .75rem 1rem;
+  color: #5A3A00; border-radius: 4px; margin-bottom: 1.6rem; }
+
+.st-key-rag_panel, .st-key-kg_panel { background: #FFFFFF; border: 1.5px solid #CBD5D0;
+  border-radius: 6px; padding: 1rem 1.2rem 1rem; }
+.st-key-kg_panel { border-color: #0E6B4F; box-shadow: 0 0 0 3px rgba(14,107,79,.08); }
+.label-head { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem;
+  padding-bottom: .6rem; margin-bottom: .8rem; border-bottom: 1.5px dashed #CBD5D0; }
+.label-head .name { font-weight: 700; font-size: 1.3rem; color: #1C2420; }
+.st-key-kg_panel .label-head .name { color: #0E6B4F; }
+.label-head .what { font-size: .9rem; color: #5B6770; }
+.label-foot { margin-top: .8rem; padding-top: .6rem; border-top: 1.5px dashed #CBD5D0;
+  font-size: .85rem; color: #5B6770; }
+
+button[data-testid="stBaseButton-secondary"] { border-radius: 999px; border: 1.5px solid #0E6B4F;
+  color: #0E6B4F; background: #FFFFFF; font-weight: 700; }
+button[data-testid="stBaseButton-primary"] { background: #0E6B4F; border-color: #0E6B4F;
+  color: #FFFFFF; border-radius: 6px; font-weight: 700; }
+button:focus-visible { outline: 3px solid #B26B00 !important; outline-offset: 2px; }
+</style>
+""", unsafe_allow_html=True)
 
 # ---------- Connections (keys come from Streamlit secrets, never from the code) ----------
 
@@ -222,20 +260,27 @@ def retrieve(question, k=3):
 
 # ---------- The two pipelines ----------
 
+STYLE = (
+    "Answer directly and concisely in plain English. Never mention 'the documents', 'the knowledge graph', "
+    "'the tools' or 'the leaflet'; just state the facts. When covering several products, give one short "
+    "bullet per product with the verdict first, for example: 'Lemsip Max Cold & Flu Lemon: avoid. Contains "
+    "phenylephrine, which is contraindicated in high blood pressure.' Do not add a medical disclaimer, "
+    "because the page already shows one."
+)
+
 RAG_CONFIG = types.GenerateContentConfig(system_instruction=(
-    "You are a careful assistant answering questions about UK cold and flu products. "
-    "Answer only from the documents provided. If they do not contain the answer, say so." + ENDING))
+    "You answer questions about UK cold and flu products using only the information provided. "
+    "If information about a product is missing, end with one line: 'No information found for: ...' "
+    + STYLE))
 
 RAG_KG_CONFIG = types.GenerateContentConfig(tools=GRAPH_TOOLS, system_instruction=(
-    "You are a careful assistant answering questions about UK cold and flu products. "
-    "Always use the knowledge graph tools, and also use the documents provided. "
-    "If they conflict, prefer the graph and mention the conflict. If neither has the answer, say so. "
-    "State high confidence facts plainly; for medium or low confidence facts, say they are not fully "
-    "confirmed and advise checking the leaflet. If a product is withdrawn, say so clearly. "
-    "If products share paracetamol, follow each product's own instruction from the graph: most say do not "
-    "take with other paracetamol products; only apply dose spacing where a product's own dose_note allows it. "
-    "Always label any medium or low confidence fact as not fully confirmed, even in lists. "
-    "Briefly explain which graph connections led to your answer." + ENDING))
+    "You answer questions about UK cold and flu products. Always use the graph tools, and also use the "
+    "information provided. If they conflict, follow the more cautious official wording and say so in a few words. "
+    "If neither has the answer, say so. If a product is withdrawn, say so clearly. "
+    "If products share paracetamol, follow each product's own instruction: most say do not take with other "
+    "paracetamol products; only apply dose spacing where a product's own dose_note allows it. "
+    "Add '(not fully confirmed, check the leaflet)' after any medium or low confidence fact. "
+    + STYLE))
 
 def generate(contents, cfg):
     last_error = "unknown error"
@@ -264,89 +309,110 @@ def tools_used(resp):
 def format_docs(docs):
     return "\n\n".join(f"[{d['title']}] {d['text']}" for d in docs)
 
+def label_head(name, what):
+    st.markdown(f'<div class="label-head"><span class="name">{name}</span>'
+                f'<span class="what">{what}</span></div>', unsafe_allow_html=True)
+
+def label_foot(model):
+    st.markdown(f'<div class="label-foot">Answered by {model}. Not medical advice.</div>',
+                unsafe_allow_html=True)
+
 # ---------- Page ----------
 
-st.title("💊 Cold and Flu Checker")
-st.markdown("#### LLM + RAG compared with LLM + RAG + Knowledge Graph")
-st.warning("Educational demo only, not medical advice. Always read the product leaflet and "
-           "speak to a pharmacist or doctor before taking any medicine.")
-
-with st.expander("About this demo"):
-    st.markdown(
-        "Ask a question about these UK cold and flu products, and see two AI systems answer side by side. "
-        "Both use the same Gemini model and the same retrieved documents. The only difference is that the "
-        "right hand side can also query a knowledge graph of products, ingredients and warnings.\n\n"
-        "**Products covered:** Lemsip Max Cold & Flu Lemon, Lemsip Cold & Flu Lemon, Beechams All in One "
-        "(oral solution), Night Nurse, Nurofen Cold & Flu, Sudafed Decongestant Tablets, Paracetamol 500mg "
-        "Tablets, Ibuprofen 200mg Tablets, plus the withdrawn Day Nurse Capsules.\n\n"
-        "**Sources:** official product information on the emc website, the NHS and the MHRA, "
-        "checked by a pharmacy graduate. Each fact in the graph carries its source and a confidence level.")
+st.markdown("""
+<div class="hero">
+  <h1>Cold and Flu Checker</h1>
+  <p class="lede">Ask one question about common UK cold and flu remedies. Two assistants answer it
+  side by side, so you can see what a knowledge graph adds to plain document search.</p>
+</div>
+<div class="chain">
+  <span class="node">Lemsip Max Cold &amp; Flu</span>
+  <span class="edge">contains</span>
+  <span class="node risk">Paracetamol</span>
+  <span class="edge">also in</span>
+  <span class="node">Beechams All in One</span>
+</div>
+<p class="chain-note">Each leaflet only describes its own product. The graph connects them.</p>
+<div class="notice">Educational demo only, not medical advice. Always read the product leaflet and speak
+to a pharmacist or doctor before taking any medicine.</div>
+""", unsafe_allow_html=True)
 
 EXAMPLES = [
-    ("Already had paracetamol?", "I've taken paracetamol today. Which of these products should I not take as well: Lemsip Max Cold & Flu, Lemsip Cold & Flu, Beechams All in One, Night Nurse, Nurofen Cold & Flu, Sudafed Decongestant?"),
-    ("High blood pressure?", "I have high blood pressure. Which of these products should I avoid: Lemsip Max Cold & Flu, Lemsip Cold & Flu, Beechams All in One, Night Nurse, Nurofen Cold & Flu, Sudafed Decongestant?"),
-    ("Which make me drowsy?", "Which of these products will make me drowsy: Lemsip Max Cold & Flu, Lemsip Cold & Flu, Beechams All in One, Night Nurse, Nurofen Cold & Flu, Sudafed Decongestant?"),
+    ("I've already had paracetamol", "I've taken paracetamol today. Which of these products should I not take as well: Lemsip Max Cold & Flu, Lemsip Cold & Flu, Beechams All in One, Night Nurse, Nurofen Cold & Flu, Sudafed Decongestant?"),
+    ("I have high blood pressure", "I have high blood pressure. Which of these products should I avoid: Lemsip Max Cold & Flu, Lemsip Cold & Flu, Beechams All in One, Night Nurse, Nurofen Cold & Flu, Sudafed Decongestant?"),
+    ("Which ones make me drowsy?", "Which of these products will make me drowsy: Lemsip Max Cold & Flu, Lemsip Cold & Flu, Beechams All in One, Night Nurse, Nurofen Cold & Flu, Sudafed Decongestant?"),
 ]
 
 if "count" not in st.session_state:
     st.session_state.count = 0
 
 run_question = None
-st.markdown("**Try an example:**")
+st.markdown("**Try one of these**")
 example_cols = st.columns(len(EXAMPLES))
 for col, (label, q) in zip(example_cols, EXAMPLES):
-    if col.button(label):
+    if col.button(label, key=f"ex_{label}"):
         run_question = q
 
-typed = st.text_area("Or ask your own question about these products:", max_chars=500, height=80)
+typed = st.text_area("Or ask your own question", max_chars=500, height=80,
+                     placeholder="For example: Can I take Nurofen Cold & Flu and Sudafed together?")
 if st.button("Compare answers", type="primary") and typed.strip():
     run_question = typed.strip()
 
 if run_question:
     if st.session_state.count >= MAX_QUESTIONS:
-        st.info("You've reached the limit of questions for this session. Thank you for trying the demo!")
+        st.info("You've reached the 10 question limit for this visit. Refresh the page later to ask more.")
     else:
         st.session_state.count += 1
-        st.markdown(f"**Question:** {run_question}")
+        st.markdown(f"#### {run_question}")
         try:
             docs = retrieve(run_question)
         except Exception:
-            st.error("The search service is busy right now. Please try again in a minute.")
+            st.error("The search service is busy. Wait a minute, then ask again.")
             st.stop()
-        prompt = f"Documents:\n{format_docs(docs)}\n\nQuestion: {run_question}"
-        left, right = st.columns(2)
+        prompt = f"Information:\n{format_docs(docs)}\n\nQuestion: {run_question}"
+        left, right = st.columns(2, gap="large")
 
         with left:
-            st.subheader("LLM + RAG")
-            st.caption("Searches the product documents only")
-            with st.spinner("Thinking..."):
-                resp, model = generate(prompt, RAG_CONFIG)
-            if resp is None:
-                st.error("The AI service is busy right now. Please try again in a minute.")
-            else:
-                st.markdown(resp.text)
-                with st.expander("Documents it used"):
-                    for d in docs:
-                        st.markdown(f"* [{d['title']}]({d['source']})")
-                st.caption(f"Model: {model}")
+            with st.container(key="rag_panel"):
+                label_head("LLM + RAG", "Product documents only")
+                with st.spinner("Searching documents..."):
+                    resp, model = generate(prompt, RAG_CONFIG)
+                if resp is None:
+                    st.error("The AI service is busy. Wait a minute, then ask again.")
+                else:
+                    st.markdown(resp.text)
+                    with st.expander("What it read"):
+                        for d in docs:
+                            st.markdown(f"* [{d['title']}]({d['source']})")
+                    label_foot(model)
 
         with right:
-            st.subheader("LLM + RAG + Knowledge Graph")
-            st.caption("Same documents, plus the knowledge graph")
-            with st.spinner("Thinking..."):
-                resp, model = generate(prompt, RAG_KG_CONFIG)
-            if resp is None:
-                st.error("The AI service is busy right now. Please try again in a minute.")
-            else:
-                st.markdown(resp.text)
-                with st.expander("Documents and graph queries it used"):
-                    for d in docs:
-                        st.markdown(f"* [{d['title']}]({d['source']})")
-                    for call in tools_used(resp):
-                        st.code(call, language="python")
-                st.caption(f"Model: {model}")
+            with st.container(key="kg_panel"):
+                label_head("LLM + RAG + KG", "Documents plus knowledge graph")
+                with st.spinner("Searching documents and graph..."):
+                    resp, model = generate(prompt, RAG_KG_CONFIG)
+                if resp is None:
+                    st.error("The AI service is busy. Wait a minute, then ask again.")
+                else:
+                    st.markdown(resp.text)
+                    with st.expander("What it read and queried"):
+                        for d in docs:
+                            st.markdown(f"* [{d['title']}]({d['source']})")
+                        for call in tools_used(resp):
+                            st.code(call, language="python")
+                    label_foot(model)
 
-st.divider()
-st.caption("Built by Maureen Okoro, pharmacy graduate and MSc Data Science student, using Neo4j AuraDB, "
+with st.expander("About this demo"):
+    st.markdown(
+        "Both assistants use the same Gemini model and receive the same three retrieved documents. "
+        "The only difference is that the right hand assistant can also query a knowledge graph linking "
+        "products to ingredients, and ingredients to warnings.\n\n"
+        "**Products covered:** Lemsip Max Cold & Flu Lemon, Lemsip Cold & Flu Lemon, Beechams All in One "
+        "(oral solution), Night Nurse, Nurofen Cold & Flu, Sudafed Decongestant Tablets, Paracetamol 500mg "
+        "Tablets, Ibuprofen 200mg Tablets, and the withdrawn Day Nurse Capsules.\n\n"
+        "**Sources:** official product information on the emc website, the NHS and the MHRA, checked by a "
+        "pharmacy graduate. Every fact in the graph carries its source and a confidence level.")
+
+st.caption("Built by Maureen Okoro, pharmacy graduate and MSc Data Science student, with Neo4j AuraDB, "
            "Gemini and Streamlit. Inspired by the knowledge graph talk at DevFest Wales 2026. "
            "Code: github.com/mauree155/cold-flu-graphrag")
