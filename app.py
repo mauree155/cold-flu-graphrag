@@ -25,45 +25,47 @@ button, textarea, input { font-family: 'Atkinson Hyperlegible', sans-serif !impo
 
 .hero h1 { font-size: 2.4rem; font-weight: 700; color: #1C2420; margin: 0 0 .2rem; line-height: 1.1; }
 .hero p { font-size: 1.1rem; color: #3E4A44; margin: 0 0 1.2rem; }
-.try { font-size: .95rem; color: #5B6770; margin: .2rem 0 .3rem; }
-.notice { border-left: 4px solid #B26B00; background: #FFF8EC; padding: .55rem .9rem;
-  color: #5A3A00; border-radius: 4px; margin: .8rem 0 1.4rem; font-size: .95rem; }
-.asked { background: #E6ECE9; border-radius: 6px; padding: .6rem .9rem; color: #2E3A34;
+.try { font-size: .95rem; color: #5B6770; margin: .4rem 0 .3rem; }
+.notice { border-left: 3px solid #B26B00; background: #FFF8EC; padding: .55rem .9rem;
+  color: #5A3A00; border-radius: 2px; margin: .8rem 0 1.4rem; font-size: .95rem; }
+.asked { background: #E9EEEB; border-radius: 4px; padding: .6rem .9rem; color: #2E3A34;
   margin: .4rem 0 1rem; font-size: .98rem; }
 .asked strong { color: #1C2420; }
 
 div[data-testid="stFormSubmitButton"] button { width: 100%; }
-button[data-testid^="stBaseButton-primary"] { background: #0E6B4F; border-color: #0E6B4F;
-  color: #FFFFFF; border-radius: 6px; font-weight: 700; }
-button[data-testid="stBaseButton-secondary"] { border-radius: 999px; border: 1.5px solid #0E6B4F;
-  color: #0E6B4F; background: #FFFFFF; font-weight: 700; padding: .2rem .9rem; }
+button[data-testid^="stBaseButton-primary"] { background: #0E6B4F; border: 1px solid #0E6B4F;
+  color: #FFFFFF; border-radius: 4px; font-weight: 700; }
+button[data-testid^="stBaseButton-primary"]:hover { background: #0B5A42; border-color: #0B5A42; }
+button[data-testid="stBaseButton-secondary"] { width: 100%; border-radius: 4px; border: 1px solid #CBD5D0;
+  background: #FFFFFF; color: #1C2420; font-weight: 400; white-space: normal; padding: .45rem .8rem; }
+button[data-testid="stBaseButton-secondary"]:hover { border-color: #0E6B4F; color: #0E6B4F; }
 button:focus-visible { outline: 3px solid #B26B00 !important; outline-offset: 2px; }
 
-.st-key-rag_panel, .st-key-kg_panel { background: #FFFFFF; border: 1.5px solid #CBD5D0;
-  border-radius: 6px; padding: 1rem 1.2rem; }
-.st-key-kg_panel { border-color: #0E6B4F; box-shadow: 0 0 0 3px rgba(14,107,79,.08); }
+.st-key-rag_panel, .st-key-kg_panel { background: #FFFFFF; border: 1px solid #CBD5D0;
+  border-radius: 4px; padding: 1rem 1.2rem; }
+.st-key-kg_panel { border-color: #0E6B4F; border-top: 3px solid #0E6B4F; }
+.st-key-rag_panel { border-top: 3px solid #8A969C; }
 .label-head { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem;
-  padding-bottom: .55rem; margin-bottom: .8rem; border-bottom: 1.5px dashed #CBD5D0; }
-.label-head .name { font-weight: 700; font-size: 1.25rem; color: #1C2420; }
+  padding-bottom: .55rem; margin-bottom: .8rem; border-bottom: 1px dashed #CBD5D0; }
+.label-head .name { font-weight: 700; font-size: 1.2rem; color: #1C2420; }
 .st-key-kg_panel .label-head .name { color: #0E6B4F; }
 .label-head .what { font-size: .88rem; color: #5B6770; }
-.label-foot { margin-top: .8rem; padding-top: .55rem; border-top: 1.5px dashed #CBD5D0;
+.label-foot { margin-top: .8rem; padding-top: .55rem; border-top: 1px dashed #CBD5D0;
   font-size: .85rem; color: #5B6770; }
 
 .verdict { display: flex; gap: .7rem; align-items: flex-start; margin: 0 0 .65rem; line-height: 1.45; }
-.badge { flex: 0 0 4.8rem; text-align: center; font-weight: 700; font-size: .85rem;
-  border-radius: 4px; padding: .12rem 0; margin-top: .1rem; }
-.badge.avoid { background: #FBEAE9; color: #B3261E; border: 1px solid #E8B4B0; }
-.badge.caution { background: #FFF4E0; color: #8A5300; border: 1px solid #F0D3A0; }
-.badge.ok { background: #E3F2EC; color: #0E6B4F; border: 1px solid #A9D5C4; }
+.badge { flex: 0 0 4.8rem; text-align: center; font-weight: 700; font-size: .82rem;
+  border-radius: 2px; padding: .1rem 0; margin-top: .12rem; }
+.badge.avoid { background: #FBEAE9; color: #B3261E; }
+.badge.caution { background: #FFF4E0; color: #8A5300; }
+.badge.ok { background: #E3F2EC; color: #0E6B4F; }
 .missing { color: #5B6770; font-style: italic; margin-top: .3rem; }
 
-.how h3 { font-size: 1.15rem; margin: 2rem 0 .5rem; color: #1C2420; }
-.chain { display: flex; flex-wrap: wrap; align-items: center; gap: .45rem; margin: .3rem 0 .4rem; }
-.chain .node { background: #FFFFFF; border: 1.5px solid #0E6B4F; color: #0E6B4F;
-  border-radius: 999px; padding: .28rem .8rem; font-weight: 700; font-size: .92rem; }
-.chain .node.risk { border-color: #B3261E; color: #B3261E; }
-.chain .edge { font-size: .88rem; color: #5B6770; font-style: italic; }
+.how h3 { font-size: 1.1rem; margin: 2rem 0 .5rem; color: #1C2420; }
+.chain { margin: .3rem 0 .6rem; font-size: 1rem; color: #5B6770; line-height: 1.9; }
+.chain .node { font-weight: 700; color: #1C2420; border-bottom: 2px solid #0E6B4F; padding-bottom: 1px; }
+.chain .node.risk { color: #B3261E; border-bottom-color: #B3261E; }
+.chain .edge { font-style: italic; margin: 0 .35rem; }
 .how p { color: #3E4A44; max-width: 70ch; }
 </style>
 """, unsafe_allow_html=True)
@@ -407,7 +409,7 @@ with st.form("ask", border=False):
         run_question = typed.strip()
 
 st.markdown('<p class="try">Or try one of these:</p>', unsafe_allow_html=True)
-chip_cols = st.columns([1, 1, 1, 2])
+chip_cols = st.columns(3)
 for col, (label, q) in zip(chip_cols, EXAMPLES):
     if col.button(label, key=f"ex_{label}"):
         run_question = q
@@ -446,7 +448,7 @@ st.markdown("""
     <span class="node">Lemsip Max Cold &amp; Flu</span>
     <span class="edge">contains</span>
     <span class="node risk">Paracetamol</span>
-    <span class="edge">also in</span>
+    <span class="edge">which is also in</span>
     <span class="node">Beechams All in One</span>
   </div>
   <p>Each product leaflet only describes its own product. Both assistants search the same leaflets, but the
