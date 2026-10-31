@@ -327,4 +327,313 @@ def graph_activity(resp):
                 if fr:
                     args = pending.get(fr.name, [{}]).pop(0) if pending.get(fr.name) else {}
                     data = fr.response
-                    if
+                    if isinstance(data, dict) and "result" in data:
+                        data = data["result"]
+                    results.append((fr.name, args, data if isinstance(data, list) else [data]))
+    except Exception:
+        pass
+    return calls, results
+
+def build_edges(results):
+    edges = {}
+
+    def add(src, scol, dst, dcol, kind, detail="", conf="high", source=""):
+        if not src or not dst:
+            return
+        key = (src, dst, kind)
+        if key not in edges:
+            edges[key] = {"src": src, "scol": scol, "dst": dst, "dcol": dcol, "kind": kind,
+                          "detail": detail or "", "conf": conf or "high", "source": source or ""}
+
+    for name, args, rows in results:
+        for r in rows:
+            if not isinstance(r, dict) or r.get("found") is False:
+                continue
+            if name == "find_products_to_avoid":
+                via = r.get("via") or ""
+                if via.startswith("ingredient: "):
+                    ing = via[len("ingredient: "):]
+                    add(r.get("product"), 0, ing, 1, "CONTAINS")
+                    add(ing, 1, r.get("condition"), 2, r.get("link"), r.get("detail"), r.get("confidence"), r.get("source"))
+                else:
+                    add(r.get("product"), 0, r.get("condition"), 2, r.get("link"), r.get("detail"),
+                        r.get("confidence"), r.get("source"))
+            elif name == "find_products_containing":
+                add(r.get("product"), 0, r.get("ingredient"), 1, "CONTAINS", r.get("amount"), r.get("confidence"))
+            elif name == "find_products_with_effect":
+                add(r.get("product"), 0, r.get("ingredient"), 1, "CONTAINS")
+                add(r.get("ingredient"), 1, r.get("effect"), 2, "CAUSES", "", r.get("confidence"))
+            elif name == "find_driving_warnings":
+                m = re.match(r"ingredient (.+) causes (.+)", r.get("reason") or "")
+                if m:
+                    add(r.get("product"), 0, m.group(1), 1, "CONTAINS")
+                    add(m.group(1), 1, "Driving", 2, "AFFECTS", r.get("detail"), r.get("confidence"), r.get("source"))
+                else:
+                    add(r.get("product"), 0, "Driving", 2, "AFFECTS", r.get("detail"), r.get("confidence"), r.get("source"))
+            elif name == "check_combination":
+                a, b = r.get("product_a"), r.get("product_b")
+                for s in r.get("shared_ingredients") or []:
+                    add(a, 0, s, 1, "SHARED", f"Both products contain {s}")
+                    add(b, 0, s, 1, "SHARED", f"Both products contain {s}")
+                for item in r.get("same_class_different_ingredients") or []:
+                    m = re.match(r"^(.+) \((.+) and (.+)\)$", item or "")
+                    if m:
+                        cls, ia, ib = m.groups()
+                        add(a, 0, ia, 1, "CONTAINS")
+                        add(b, 0, ib, 1, "CONTAINS")
+                        add(ia, 1, cls, 2, "SAME_CLASS", f"Two {cls.lower()} ingredients together")
+                        add(ib, 1, cls, 2, "SAME_CLASS", f"Two {cls.lower()} ingredients together")
+                for item in r.get("leaflet_warnings") or []:
+                    m = re.match(r"^(.+?): (.+) \((.+?) contains (.+?), confidence: (\w+)\)$", item or "")
+                    if m:
+                        prod, rule, other, ing, conf = m.groups()
+                        add(other, 0, ing, 1, "CONTAINS")
+                        add(prod, 0, ing, 1, "AVOID_WITH", rule, conf)
+            elif name == "get_product_info":
+                label = r.get("product")
+                if r.get("kind") == "WithdrawnProduct":
+                    label = f"{label} (withdrawn)"
+                for ing in r.get("ingredients") or []:
+                    if isinstance(ing, dict) and ing.get("ingredient"):
+                        add(label, 0, ing["ingredient"], 1, "CONTAINS", ing.get("amount"), ing.get("confidence"))
+                for w in r.get("product_level_warnings") or []:
+                    add(label, 0, w.get("target"), 2, w.get("link"), w.get("detail"), w.get("confidence"), w.get("source"))
+    return list(edges.values())
+
+def edge_colour(kind):
+    kind = (kind or "").upper()
+    if kind == "CONTAINS":
+        return GREY
+    if kind in ("CONTRAINDICATED_IN", "AVOID_WITH", "SAME_CLASS", "SHARED"):
+        return RED
+    return AMBER
+
+def short(text, n):
+    return text if len(text) <= n else text[: n - 1] + "…"
+
+def graph_html(edges):
+    cols = {0: [], 1: [], 2: []}
+    for e in edges:
+        if e["src"] not in cols[e["scol"]]:
+            cols[e["scol"]].append(e["src"])
+        if e["dst"] not in cols[e["dcol"]]:
+            cols[e["dcol"]].append(e["dst"])
+    row = 30
+    n = max(len(c) for c in cols.values()) or 1
+    height = n * row + 20
+
+    def ypos(col, name):
+        items = cols[col]
+        offset = (n - len(items)) * row / 2
+        return 14 + offset + items.index(name) * row + 6
+
+    out_x = {0: 185, 1: 452}
+    in_x = {1: 296, 2: 533}
+    parts = []
+    for i, e in enumerate(edges):
+        x1, y1 = out_x[e["scol"]], ypos(e["scol"], e["src"])
+        x2, y2 = in_x[e["dcol"]], ypos(e["dcol"], e["dst"])
+        mid = (x1 + x2) / 2
+        d = f"M{x1} {y1} C{mid} {y1} {mid} {y2} {x2} {y2}"
+        colour = edge_colour(e["kind"])
+        dashed = e["conf"] != "high"
+        tip = f"{e['src']} to {e['dst']}"
+        if e["detail"]:
+            tip += f": {e['detail']}"
+        tip += f" ({e['conf']} confidence)"
+        if e["source"]:
+            tip += f". Source: {e['source']}"
+        cls = "fade" if dashed else "draw"
+        dash = ' stroke-dasharray="5 4"' if dashed else ""
+        parts.append(
+            f'<g><title>{html.escape(tip)}</title>'
+            f'<path d="{d}" stroke="transparent" stroke-width="12" fill="none"/>'
+            f'<path d="{d}" stroke="{colour}" stroke-width="1.8" fill="none"{dash} class="{cls}" '
+            f'style="animation-delay:{i * 0.12:.2f}s"/></g>')
+
+    for name in cols[0]:
+        y = ypos(0, name)
+        parts.append(f'<text x="0" y="{y + 4}" class="n0"><title>{html.escape(name)}</title>'
+                     f'{html.escape(short(name, 26))}</text>')
+    for name in cols[1]:
+        y = ypos(1, name)
+        parts.append(f'<circle cx="296" cy="{y}" r="3.5" fill="#5B6770"/>'
+                     f'<text x="305" y="{y + 4}" class="n1">{html.escape(short(name, 20))}</text>')
+    for name in cols[2]:
+        y = ypos(2, name)
+        parts.append(f'<circle cx="540" cy="{y}" r="7" fill="#FFFFFF" stroke="{RED}" stroke-width="1.8"/>'
+                     f'<text x="553" y="{y + 4}" class="n2">{html.escape(short(name, 18))}</text>')
+
+    return f"""
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&display=swap');
+body {{ margin: 0; font-family: 'Atkinson Hyperlegible', sans-serif; }}
+.n0 {{ font-size: 13px; fill: #1C2420; font-weight: 700; }}
+.n1 {{ font-size: 13px; fill: #5B6770; }}
+.n2 {{ font-size: 13px; fill: #A32D2D; font-weight: 700; }}
+.draw {{ stroke-dasharray: 600; stroke-dashoffset: 600; animation: draw .9s ease-out forwards; }}
+.fade {{ opacity: 0; animation: fade .6s ease-out forwards; }}
+@keyframes draw {{ to {{ stroke-dashoffset: 0; }} }}
+@keyframes fade {{ to {{ opacity: 1; }} }}
+@media (prefers-reduced-motion: reduce) {{ .draw {{ animation: none; stroke-dashoffset: 0; }} .fade {{ animation: none; opacity: 1; }} }}
+</style>
+<svg width="100%" viewBox="0 0 680 {height}" role="img" aria-label="Connections the knowledge graph followed">
+{''.join(parts)}
+</svg>""", height
+
+LEGEND = f"""
+<div class="legend">
+  <span><svg width="22" height="6"><line x1="0" y1="3" x2="22" y2="3" stroke="{GREY}" stroke-width="2"/></svg>Contains</span>
+  <span><svg width="22" height="6"><line x1="0" y1="3" x2="22" y2="3" stroke="{RED}" stroke-width="2"/></svg>Avoid</span>
+  <span><svg width="22" height="6"><line x1="0" y1="3" x2="22" y2="3" stroke="{AMBER}" stroke-width="2"/></svg>Caution</span>
+  <span><svg width="22" height="6"><line x1="0" y1="3" x2="22" y2="3" stroke="{AMBER}" stroke-width="2" stroke-dasharray="4 3"/></svg>Not fully confirmed</span>
+  <span>Hover a line to see the official wording</span>
+</div>"""
+
+# ---------- Rendering ----------
+
+VERDICT_LINE = re.compile(r"^\s*[\*\-]\s+\*\*(.+?)\*\*\s*:?\s*(Avoid|Caution|OK)\b[\.:]?\s*(.*)$", re.IGNORECASE)
+
+def render_answer(text):
+    out = []
+    for line in text.splitlines():
+        m = VERDICT_LINE.match(line)
+        if m:
+            product = html.escape(m.group(1).strip().rstrip(":"))
+            word = m.group(2).lower()
+            verdict = "OK" if word == "ok" else word
+            reason = html.escape(m.group(3).replace("**", "").strip())
+            why = f' <span class="why">{reason}</span>' if SHOW_REASONS and reason else ""
+            out += ["", f'<p class="ans"><span class="pn">{product}</span>: '
+                        f'<span class="v {word}">{verdict}</span>.{why}</p>', ""]
+        elif line.strip().lower().startswith("no information found"):
+            out += ["", f'<p class="missing">{html.escape(line.strip())}</p>', ""]
+        else:
+            out.append(line)
+    st.markdown("\n".join(out), unsafe_allow_html=True)
+
+def run_comparison(question):
+    docs = retrieve(question)
+    prompt = f"Information:\n{format_docs(docs)}\n\nQuestion: {question}"
+    rag_resp, rag_model = generate(prompt, RAG_CONFIG)
+    kg_resp, kg_model = generate(prompt, RAG_KG_CONFIG)
+    calls, results = graph_activity(kg_resp) if kg_resp else ([], [])
+    return {
+        "question": question, "docs": docs,
+        "rag_text": rag_resp.text if rag_resp else None, "rag_model": rag_model,
+        "kg_text": kg_resp.text if kg_resp else None, "kg_model": kg_model,
+        "calls": calls, "edges": build_edges(results),
+    }
+
+def render_turn(t):
+    st.markdown(f'<div class="bubble-row"><div class="bubble">{html.escape(t["question"])}</div></div>',
+                unsafe_allow_html=True)
+    left, right = st.columns(2, gap="large")
+    with left:
+        st.markdown('<p class="colhead">LLM + RAG</p><p class="colsub">Searches the leaflets</p>',
+                    unsafe_allow_html=True)
+        if t["rag_text"] is None:
+            st.error("The AI service is busy. Wait a minute, then ask again.")
+        else:
+            render_answer(t["rag_text"])
+            items = "".join(f'<p class="readitem">{html.escape(d["title"])}</p>' for d in t["docs"])
+            st.markdown(f'<p class="readhead">Read {len(t["docs"])} leaflets</p>{items}', unsafe_allow_html=True)
+    with right:
+        st.markdown('<p class="colhead kg">LLM + RAG + KG</p>'
+                    '<p class="colsub">Searches the leaflets and follows the connections</p>',
+                    unsafe_allow_html=True)
+        if t["kg_text"] is None:
+            st.error("The AI service is busy. Wait a minute, then ask again.")
+        else:
+            render_answer(t["kg_text"])
+
+    if t["edges"]:
+        st.markdown('<p class="graphhead">How the KG assistant got there</p>'
+                    '<p class="graphsub">Each leaflet only describes its own product. '
+                    'The graph links them through their ingredients.</p>', unsafe_allow_html=True)
+        svg, height = graph_html(t["edges"])
+        components.html(svg, height=height + 10)
+        st.markdown(LEGEND, unsafe_allow_html=True)
+        with st.expander("Sources for these connections"):
+            seen = set()
+            for e in t["edges"]:
+                if e["source"] and e["detail"] and (e["detail"], e["source"]) not in seen:
+                    seen.add((e["detail"], e["source"]))
+                    st.markdown(f"* **{e['src']} to {e['dst']}:** {e['detail']} "
+                                f"({e['conf']} confidence). [Source]({e['source']})")
+            if t["calls"]:
+                st.markdown("**Graph queries run**")
+                for call in t["calls"]:
+                    st.code(call, language="python")
+    elif t["kg_text"] is not None:
+        st.markdown('<p class="meta">The graph was not needed for this answer.</p>', unsafe_allow_html=True)
+
+    st.markdown(f'<p class="meta">Answered by {t["rag_model"]} (left) and {t["kg_model"]} (right). '
+                f'Not medical advice.</p><hr class="turn-end">', unsafe_allow_html=True)
+
+# ---------- Page ----------
+
+st.markdown("""
+<div class="hero">
+  <h1>Cold and Flu Checker</h1>
+  <p>Ask about common UK cold and flu remedies and compare two AI assistants side by side.
+  Educational demo, not medical advice. Always read the leaflet and speak to a pharmacist.</p>
+</div>
+""", unsafe_allow_html=True)
+
+with st.expander("How this comparison works"):
+    st.markdown(
+        "Both assistants use the same Gemini model and read the same three leaflets, chosen by searching "
+        "for the ones closest to your question. Plain document search can only read a few leaflets at a "
+        "time, and real catalogues hold thousands, so some will always be missed. The right hand assistant "
+        "can also follow a knowledge graph that links each product to its ingredients and each ingredient "
+        "to its official warnings.\n\n"
+        "**Products covered:** Lemsip Max Cold & Flu Lemon, Lemsip Cold & Flu Lemon, Beechams All in One "
+        "(oral solution), Night Nurse, Nurofen Cold & Flu, Sudafed Decongestant Tablets, Paracetamol 500mg "
+        "Tablets, Ibuprofen 200mg Tablets, and the withdrawn Day Nurse Capsules.\n\n"
+        "**Sources:** official product information on the emc website, the NHS and the MHRA, checked by a "
+        "pharmacy graduate. Every fact in the graph carries its source and a confidence level.")
+
+EXAMPLES = [
+    ("I've had paracetamol today", "I've taken paracetamol today. Which of these products should I not take as well: Lemsip Max Cold & Flu, Lemsip Cold & Flu, Beechams All in One, Night Nurse, Nurofen Cold & Flu, Sudafed Decongestant?"),
+    ("I have high blood pressure", "I have high blood pressure. Which of these products should I avoid: Lemsip Max Cold & Flu, Lemsip Cold & Flu, Beechams All in One, Night Nurse, Nurofen Cold & Flu, Sudafed Decongestant?"),
+    ("Which ones make me drowsy?", "Which of these products will make me drowsy: Lemsip Max Cold & Flu, Lemsip Cold & Flu, Beechams All in One, Night Nurse, Nurofen Cold & Flu, Sudafed Decongestant?"),
+]
+
+if "turns" not in st.session_state:
+    st.session_state.turns = []
+
+question = None
+if not st.session_state.turns:
+    st.markdown('<p class="start">Start with one of these, or type your own question below.</p>',
+                unsafe_allow_html=True)
+    ex_cols = st.columns(3)
+    for col, (label, q) in zip(ex_cols, EXAMPLES):
+        if col.button(label, key=f"ex_{label}"):
+            question = q
+
+typed = st.chat_input("Ask anything about these cold and flu products", max_chars=500)
+if typed and typed.strip():
+    question = typed.strip()
+
+for turn in st.session_state.turns:
+    render_turn(turn)
+
+if question:
+    if len(st.session_state.turns) >= MAX_QUESTIONS:
+        st.info("You've reached the 10 question limit for this visit. Refresh the page later to ask more.")
+    else:
+        with st.spinner("Asking both assistants..."):
+            try:
+                turn = run_comparison(question)
+            except Exception:
+                turn = None
+        if turn is None:
+            st.error("The search service is busy. Wait a minute, then ask again.")
+        else:
+            st.session_state.turns.append(turn)
+            st.rerun()
+
+st.caption("Built by Maureen Okoro, pharmacy graduate and MSc Data Science student, with Neo4j AuraDB, "
+           "Gemini and Streamlit. Inspired by the knowledge graph talk at DevFest Wales 2026. "
+           "Code: github.com/mauree155/cold-flu-graphrag")
