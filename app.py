@@ -278,7 +278,8 @@ STYLE = (
     "Answer directly and concisely in plain English. Never mention 'the documents', 'the knowledge graph', "
     "'the tools' or 'the leaflet'; just state the facts. When the answer covers products, write one bullet "
     "per product in exactly this format: '- **Product name**: Avoid. Short reason.' The verdict must be "
-    "Avoid, Caution or OK. Never group several products in one bullet. For a question about a single fact, "
+    "Avoid, Caution or OK. Never group several products in one bullet, and do not add an introduction or "
+    "summary paragraph around the list. For a question about a single fact, "
     "answer in one or two short sentences instead. Do not add a medical disclaimer, because the page shows one."
 )
 
@@ -402,9 +403,9 @@ def build_edges(results):
 
 def edge_colour(kind):
     kind = (kind or "").upper()
-    if kind == "CONTAINS":
+    if kind in ("CONTAINS", "SHARED"):
         return GREY
-    if kind in ("CONTRAINDICATED_IN", "AVOID_WITH", "SAME_CLASS", "SHARED"):
+    if kind in ("CONTRAINDICATED_IN", "AVOID_WITH", "SAME_CLASS"):
         return RED
     return AMBER
 
@@ -418,6 +419,7 @@ def graph_html(edges):
             cols[e["scol"]].append(e["src"])
         if e["dst"] not in cols[e["dcol"]]:
             cols[e["dcol"]].append(e["dst"])
+    shared = {e["dst"] for e in edges if (e["kind"] or "").upper() == "SHARED"}
     row = 30
     n = max(len(c) for c in cols.values()) or 1
     height = n * row + 20
@@ -427,8 +429,8 @@ def graph_html(edges):
         offset = (n - len(items)) * row / 2
         return 14 + offset + items.index(name) * row + 6
 
-    out_x = {0: 185, 1: 452}
-    in_x = {1: 296, 2: 533}
+    out_x = {0: 215, 1: 470}
+    in_x = {1: 322, 2: 548}
     parts = []
     for i, e in enumerate(edges):
         x1, y1 = out_x[e["scol"]], ypos(e["scol"], e["src"])
@@ -454,15 +456,20 @@ def graph_html(edges):
     for name in cols[0]:
         y = ypos(0, name)
         parts.append(f'<text x="0" y="{y + 4}" class="n0"><title>{html.escape(name)}</title>'
-                     f'{html.escape(short(name, 26))}</text>')
+                     f'{html.escape(short(name, 29))}</text>')
     for name in cols[1]:
         y = ypos(1, name)
-        parts.append(f'<circle cx="296" cy="{y}" r="3.5" fill="#5B6770"/>'
-                     f'<text x="305" y="{y + 4}" class="n1">{html.escape(short(name, 20))}</text>')
+        if name in shared:
+            parts.append(f'<circle cx="322" cy="{y}" r="5" fill="{RED}"/>'
+                         f'<text x="333" y="{y + 4}" class="n1s">{html.escape(short(name, 20))}'
+                         f'<tspan class="note"> shared</tspan></text>')
+        else:
+            parts.append(f'<circle cx="322" cy="{y}" r="3.5" fill="#5B6770"/>'
+                         f'<text x="331" y="{y + 4}" class="n1">{html.escape(short(name, 20))}</text>')
     for name in cols[2]:
         y = ypos(2, name)
-        parts.append(f'<circle cx="540" cy="{y}" r="7" fill="#FFFFFF" stroke="{RED}" stroke-width="1.8"/>'
-                     f'<text x="553" y="{y + 4}" class="n2">{html.escape(short(name, 18))}</text>')
+        parts.append(f'<circle cx="555" cy="{y}" r="7" fill="#FFFFFF" stroke="{RED}" stroke-width="1.8"/>'
+                     f'<text x="568" y="{y + 4}" class="n2">{html.escape(short(name, 16))}</text>')
 
     return f"""
 <style>
@@ -470,6 +477,8 @@ def graph_html(edges):
 body {{ margin: 0; font-family: 'Atkinson Hyperlegible', sans-serif; }}
 .n0 {{ font-size: 13px; fill: #1C2420; font-weight: 700; }}
 .n1 {{ font-size: 13px; fill: #5B6770; }}
+.n1s {{ font-size: 13px; fill: #A32D2D; font-weight: 700; }}
+.note {{ font-weight: 400; font-style: italic; fill: #A32D2D; }}
 .n2 {{ font-size: 13px; fill: #A32D2D; font-weight: 700; }}
 .draw {{ stroke-dasharray: 600; stroke-dashoffset: 600; animation: draw .9s ease-out forwards; }}
 .fade {{ opacity: 0; animation: fade .6s ease-out forwards; }}
@@ -484,10 +493,10 @@ body {{ margin: 0; font-family: 'Atkinson Hyperlegible', sans-serif; }}
 LEGEND = f"""
 <div class="legend">
   <span><svg width="22" height="6"><line x1="0" y1="3" x2="22" y2="3" stroke="{GREY}" stroke-width="2"/></svg>Contains</span>
+  <span><svg width="10" height="10"><circle cx="5" cy="5" r="4.5" fill="{RED}"/></svg>Ingredient shared by several products</span>
   <span><svg width="22" height="6"><line x1="0" y1="3" x2="22" y2="3" stroke="{RED}" stroke-width="2"/></svg>Avoid</span>
   <span><svg width="22" height="6"><line x1="0" y1="3" x2="22" y2="3" stroke="{AMBER}" stroke-width="2"/></svg>Caution</span>
   <span><svg width="22" height="6"><line x1="0" y1="3" x2="22" y2="3" stroke="{AMBER}" stroke-width="2" stroke-dasharray="4 3"/></svg>Not fully confirmed</span>
-  <span>Hover a line to see the official wording</span>
 </div>"""
 
 # ---------- Rendering ----------
