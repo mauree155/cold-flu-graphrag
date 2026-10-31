@@ -3,6 +3,7 @@ import re
 import time
 import numpy as np
 import streamlit as st
+import streamlit.components.v1 as components
 from neo4j import GraphDatabase
 from google import genai
 from google.genai import types
@@ -12,6 +13,9 @@ st.set_page_config(page_title="Cold and Flu Checker", page_icon="💊", layout="
 MODELS = ["gemini-3.1-flash-lite", "gemini-2.5-flash"]
 EMBED_MODELS = ["gemini-embedding-001", "text-embedding-004"]
 MAX_QUESTIONS = 10
+SHOW_REASONS = True
+
+RED, AMBER, GREY = "#A32D2D", "#B26B00", "#9AA5A0"
 
 # ---------- Look and feel ----------
 
@@ -21,52 +25,41 @@ st.markdown("""
 html, body, [data-testid="stAppViewContainer"], [data-testid="stMarkdownContainer"],
 button, textarea, input { font-family: 'Atkinson Hyperlegible', sans-serif !important; }
 #MainMenu, footer { visibility: hidden; }
-.block-container { max-width: 1080px; padding-top: 2.2rem; }
+.block-container { max-width: 1000px; padding-top: 2.2rem; padding-bottom: 7rem; }
 
-.hero h1 { font-size: 2.4rem; font-weight: 700; color: #1C2420; margin: 0 0 .2rem; line-height: 1.1; }
-.hero p { font-size: 1.1rem; color: #3E4A44; margin: 0 0 1.2rem; }
-.try { font-size: .95rem; color: #5B6770; margin: .4rem 0 .3rem; }
-.notice { border-left: 3px solid #B26B00; background: #FFF8EC; padding: .55rem .9rem;
-  color: #5A3A00; border-radius: 2px; margin: .8rem 0 1.4rem; font-size: .95rem; }
-.asked { background: #E9EEEB; border-radius: 4px; padding: .6rem .9rem; color: #2E3A34;
-  margin: .4rem 0 1rem; font-size: .98rem; }
-.asked strong { color: #1C2420; }
+.hero h1 { font-size: 2.1rem; font-weight: 700; color: #1C2420; margin: 0 0 .3rem; line-height: 1.15; }
+.hero p { font-size: 1.05rem; color: #5B6770; margin: 0 0 .6rem; line-height: 1.6; max-width: 65ch; }
+.start { color: #5B6770; font-size: .95rem; margin: 2.2rem 0 .5rem; }
 
-div[data-testid="stFormSubmitButton"] button { width: 100%; }
-button[data-testid^="stBaseButton-primary"] { background: #0E6B4F; border: 1px solid #0E6B4F;
-  color: #FFFFFF; border-radius: 4px; font-weight: 700; }
-button[data-testid^="stBaseButton-primary"]:hover { background: #0B5A42; border-color: #0B5A42; }
 button[data-testid="stBaseButton-secondary"] { width: 100%; border-radius: 4px; border: 1px solid #CBD5D0;
-  background: #FFFFFF; color: #1C2420; font-weight: 400; white-space: normal; padding: .45rem .8rem; }
+  background: #FFFFFF; color: #1C2420; font-weight: 400; white-space: normal; padding: .5rem .8rem; }
 button[data-testid="stBaseButton-secondary"]:hover { border-color: #0E6B4F; color: #0E6B4F; }
 button:focus-visible { outline: 3px solid #B26B00 !important; outline-offset: 2px; }
 
-.st-key-rag_panel, .st-key-kg_panel { background: #FFFFFF; border: 1px solid #CBD5D0;
-  border-radius: 4px; padding: 1rem 1.2rem; }
-.st-key-kg_panel { border-color: #0E6B4F; border-top: 3px solid #0E6B4F; }
-.st-key-rag_panel { border-top: 3px solid #8A969C; }
-.label-head { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem;
-  padding-bottom: .55rem; margin-bottom: .8rem; border-bottom: 1px dashed #CBD5D0; }
-.label-head .name { font-weight: 700; font-size: 1.2rem; color: #1C2420; }
-.st-key-kg_panel .label-head .name { color: #0E6B4F; }
-.label-head .what { font-size: .88rem; color: #5B6770; }
-.label-foot { margin-top: .8rem; padding-top: .55rem; border-top: 1px dashed #CBD5D0;
-  font-size: .85rem; color: #5B6770; }
+.bubble-row { display: flex; justify-content: flex-end; margin: 1.8rem 0 1.3rem; }
+.bubble { background: #E9EEEB; border-radius: 16px; padding: .65rem 1rem; max-width: 75%;
+  font-size: 1rem; line-height: 1.5; color: #1C2420; }
 
-.verdict { display: flex; gap: .7rem; align-items: flex-start; margin: 0 0 .65rem; line-height: 1.45; }
-.badge { flex: 0 0 4.8rem; text-align: center; font-weight: 700; font-size: .82rem;
-  border-radius: 2px; padding: .1rem 0; margin-top: .12rem; }
-.badge.avoid { background: #FBEAE9; color: #B3261E; }
-.badge.caution { background: #FFF4E0; color: #8A5300; }
-.badge.ok { background: #E3F2EC; color: #0E6B4F; }
-.missing { color: #5B6770; font-style: italic; margin-top: .3rem; }
+.colhead { font-weight: 700; font-size: 1rem; color: #1C2420; margin: 0; }
+.colhead.kg { color: #0E6B4F; }
+.colsub { font-size: .85rem; color: #7A857F; margin: 0 0 .9rem; }
+.ans { margin: 0 0 .5rem; line-height: 1.55; font-size: .98rem; color: #1C2420; }
+.ans .pn { font-weight: 700; }
+.v.avoid { color: #B3261E; font-weight: 700; }
+.v.caution { color: #8A5300; font-weight: 700; }
+.v.ok { color: #0E6B4F; font-weight: 700; }
+.ans .why { color: #5B6770; }
+.missing { color: #7A857F; font-style: italic; margin-top: .6rem; font-size: .92rem; }
+.readhead { font-size: .8rem; color: #7A857F; margin: 1.2rem 0 .35rem; }
+.readitem { font-size: .88rem; color: #5B6770; border-left: 2px solid #CBD5D0; padding-left: .5rem; margin: 0 0 .3rem; }
 
-.how h3 { font-size: 1.1rem; margin: 2rem 0 .5rem; color: #1C2420; }
-.chain { margin: .3rem 0 .6rem; font-size: 1rem; color: #5B6770; line-height: 1.9; }
-.chain .node { font-weight: 700; color: #1C2420; border-bottom: 2px solid #0E6B4F; padding-bottom: 1px; }
-.chain .node.risk { color: #B3261E; border-bottom-color: #B3261E; }
-.chain .edge { font-style: italic; margin: 0 .35rem; }
-.how p { color: #3E4A44; max-width: 70ch; }
+.graphhead { font-weight: 700; font-size: 1rem; color: #1C2420; margin: 1.6rem 0 .1rem;
+  padding-top: 1.1rem; border-top: 1px solid #E1E6E3; }
+.graphsub { font-size: .9rem; color: #5B6770; margin: 0 0 .3rem; }
+.legend { display: flex; flex-wrap: wrap; gap: 1.1rem; font-size: .82rem; color: #5B6770; margin: .1rem 0 .5rem; }
+.legend span { display: inline-flex; align-items: center; gap: .4rem; }
+.meta { font-size: .8rem; color: #9AA5A0; margin: .5rem 0 0; }
+.turn-end { border: none; border-top: 1px solid #E1E6E3; margin: 2rem 0 0; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -167,13 +160,13 @@ def check_combination(product_a: str, product_b: str) -> list:
 CONDITION_QUERY = """
 MATCH (p:Product)-[:CONTAINS]->(i:Ingredient)-[r:CONTRAINDICATED_IN|CAUTION_IN]->(c:Condition)
 WHERE toLower(c.name) CONTAINS toLower($condition)
-RETURN p.name AS product, 'ingredient: ' + i.name AS via, type(r) AS link,
+RETURN p.name AS product, c.name AS condition, 'ingredient: ' + i.name AS via, type(r) AS link,
   r.detail + CASE WHEN r.confidence <> 'high' THEN ' (not fully confirmed, check the leaflet)' ELSE '' END AS detail,
   r.confidence AS confidence, r.verified AS verified, r.source AS source
 UNION
 MATCH (p:Product)-[r:CONTRAINDICATED_IN|CAUTION_IN]->(c:Condition)
 WHERE toLower(c.name) CONTAINS toLower($condition)
-RETURN p.name AS product, 'product leaflet' AS via, type(r) AS link,
+RETURN p.name AS product, c.name AS condition, 'product leaflet' AS via, type(r) AS link,
   r.detail + CASE WHEN r.confidence <> 'high' THEN ' (not fully confirmed, check the leaflet)' ELSE '' END AS detail,
   r.confidence AS confidence, r.verified AS verified, r.source AS source
 """
@@ -188,7 +181,7 @@ def find_products_to_avoid(condition: str) -> list:
 
 INGREDIENT_QUERY = """
 MATCH (p:Product)-[c:CONTAINS]->(i:Ingredient) WHERE toLower(i.name) = toLower($ingredient)
-RETURN p.name AS product, c.amount AS amount, c.confidence AS confidence,
+RETURN p.name AS product, i.name AS ingredient, c.amount AS amount, c.confidence AS confidence,
   p.max_daily_doses AS max_daily_doses, p.dose_note AS dose_note
 """
 
@@ -204,7 +197,7 @@ MATCH (p:Product)-[:CONTAINS]->(i:Ingredient)-[e:CAUSES]->(eff:Effect)
 WHERE toLower(eff.name) = toLower($effect)
 OPTIONAL MATCH (eff)-[a:AFFECTS]->(act:Activity)
 OPTIONAL MATCH (i)-[x:INTERACTS_WITH]->(s:Substance)
-RETURN p.name AS product, i.name AS ingredient, e.confidence AS confidence,
+RETURN p.name AS product, i.name AS ingredient, eff.name AS effect, e.confidence AS confidence,
   collect(DISTINCT act.name + ': ' + a.detail + ' (confidence: ' + a.confidence + ')') AS affects,
   collect(DISTINCT s.name + ': ' + x.effect) AS avoid_with
 """
@@ -218,11 +211,11 @@ def find_products_with_effect(effect: str) -> list:
 DRIVING_QUERY = """
 MATCH (p:Product)-[:CONTAINS]->(i:Ingredient)-[:CAUSES]->(eff:Effect)-[a:AFFECTS]->(:Activity {name: 'Driving'})
 RETURN p.name AS product, 'ingredient ' + i.name + ' causes ' + eff.name AS reason,
-  a.detail AS detail, a.confidence AS confidence
+  a.detail AS detail, a.confidence AS confidence, a.source AS source
 UNION
 MATCH (p:Product)-[a:AFFECTS]->(:Activity {name: 'Driving'})
 RETURN p.name AS product, 'stated on product leaflet' AS reason,
-  a.detail AS detail, a.confidence AS confidence
+  a.detail AS detail, a.confidence AS confidence, a.source AS source
 """
 
 def find_driving_warnings() -> list:
@@ -285,8 +278,8 @@ STYLE = (
     "Answer directly and concisely in plain English. Never mention 'the documents', 'the knowledge graph', "
     "'the tools' or 'the leaflet'; just state the facts. When the answer covers products, write one bullet "
     "per product in exactly this format: '- **Product name**: Avoid. Short reason.' The verdict must be "
-    "Avoid, Caution or OK. For a question about a single fact, answer in one or two short sentences instead. "
-    "Do not add a medical disclaimer, because the page already shows one."
+    "Avoid, Caution or OK. Never group several products in one bullet. For a question about a single fact, "
+    "answer in one or two short sentences instead. Do not add a medical disclaimer, because the page shows one."
 )
 
 RAG_CONFIG = types.GenerateContentConfig(system_instruction=(
@@ -314,159 +307,24 @@ def generate(contents, cfg):
                 time.sleep(3)
     return None, last_error
 
-def tools_used(resp):
-    calls = []
+def format_docs(docs):
+    return "\n\n".join(f"[{d['title']}] {d['text']}" for d in docs)
+
+# ---------- Reading what the graph actually returned ----------
+
+def graph_activity(resp):
+    """Pair each graph tool call with its result, in order."""
+    calls, results, pending = [], [], {}
     try:
         for content in resp.automatic_function_calling_history or []:
             for part in content.parts or []:
                 fc = getattr(part, "function_call", None)
                 if fc:
-                    args = ", ".join(f"{k}={v!r}" for k, v in (fc.args or {}).items())
-                    calls.append(f"{fc.name}({args})")
-    except Exception:
-        pass
-    return calls
-
-def format_docs(docs):
-    return "\n\n".join(f"[{d['title']}] {d['text']}" for d in docs)
-
-# ---------- Rendering helpers ----------
-
-VERDICT_LINE = re.compile(r"^\s*[\*\-]\s+\*\*(.+?)\*\*\s*:?\s*(Avoid|Caution|OK)\b[\.:]?\s*(.*)$", re.IGNORECASE)
-
-def render_answer(text):
-    out = []
-    for line in text.splitlines():
-        m = VERDICT_LINE.match(line)
-        if m:
-            product = html.escape(m.group(1).strip().rstrip(":"))
-            word = m.group(2).lower()
-            verdict = "OK" if word == "ok" else word.capitalize()
-            reason = html.escape(m.group(3).replace("**", "").strip())
-            out += ["", f'<div class="verdict"><span class="badge {word}">{verdict}</span>'
-                        f'<span><strong>{product}</strong> {reason}</span></div>', ""]
-        elif line.strip().lower().startswith("no information found"):
-            out += ["", f'<div class="missing">{html.escape(line.strip())}</div>', ""]
-        else:
-            out.append(line)
-    st.markdown("\n".join(out), unsafe_allow_html=True)
-
-def render_panel(key, name, what, result, expander_title):
-    with st.container(key=key):
-        st.markdown(f'<div class="label-head"><span class="name">{name}</span>'
-                    f'<span class="what">{what}</span></div>', unsafe_allow_html=True)
-        if result["text"] is None:
-            st.error("The AI service is busy. Wait a minute, then ask again.")
-            return
-        render_answer(result["text"])
-        with st.expander(expander_title):
-            for d in result["docs"]:
-                st.markdown(f"* [{d['title']}]({d['source']})")
-            for call in result.get("calls", []):
-                st.code(call, language="python")
-        st.markdown(f'<div class="label-foot">Answered by {result["model"]}. Not medical advice.</div>',
-                    unsafe_allow_html=True)
-
-def run_comparison(question):
-    docs = retrieve(question)
-    prompt = f"Information:\n{format_docs(docs)}\n\nQuestion: {question}"
-    rag_resp, rag_model = generate(prompt, RAG_CONFIG)
-    kg_resp, kg_model = generate(prompt, RAG_KG_CONFIG)
-    return {
-        "question": question,
-        "rag": {"text": rag_resp.text if rag_resp else None, "model": rag_model, "docs": docs},
-        "kg": {"text": kg_resp.text if kg_resp else None, "model": kg_model, "docs": docs,
-               "calls": tools_used(kg_resp) if kg_resp else []},
-    }
-
-# ---------- Page ----------
-
-st.markdown("""
-<div class="hero">
-  <h1>Cold and Flu Checker</h1>
-  <p>Ask about common UK cold and flu remedies and compare two AI assistants side by side.</p>
-</div>
-""", unsafe_allow_html=True)
-
-EXAMPLES = [
-    ("I've had paracetamol", "I've taken paracetamol today. Which of these products should I not take as well: Lemsip Max Cold & Flu, Lemsip Cold & Flu, Beechams All in One, Night Nurse, Nurofen Cold & Flu, Sudafed Decongestant?"),
-    ("High blood pressure", "I have high blood pressure. Which of these products should I avoid: Lemsip Max Cold & Flu, Lemsip Cold & Flu, Beechams All in One, Night Nurse, Nurofen Cold & Flu, Sudafed Decongestant?"),
-    ("Which make me drowsy?", "Which of these products will make me drowsy: Lemsip Max Cold & Flu, Lemsip Cold & Flu, Beechams All in One, Night Nurse, Nurofen Cold & Flu, Sudafed Decongestant?"),
-]
-
-if "count" not in st.session_state:
-    st.session_state.count = 0
-if "result" not in st.session_state:
-    st.session_state.result = None
-
-run_question = None
-
-with st.form("ask", border=False):
-    c1, c2 = st.columns([5, 1], vertical_alignment="bottom")
-    typed = c1.text_input("Your question", max_chars=500, label_visibility="collapsed",
-                          placeholder="Ask about these cold and flu products, for example: Can I take Nurofen Cold & Flu with Sudafed?")
-    if c2.form_submit_button("Compare", type="primary") and typed.strip():
-        run_question = typed.strip()
-
-st.markdown('<p class="try">Or try one of these:</p>', unsafe_allow_html=True)
-chip_cols = st.columns(3)
-for col, (label, q) in zip(chip_cols, EXAMPLES):
-    if col.button(label, key=f"ex_{label}"):
-        run_question = q
-
-st.markdown('<div class="notice">Educational demo only, not medical advice. Always read the product '
-            'leaflet and speak to a pharmacist or doctor before taking any medicine.</div>',
-            unsafe_allow_html=True)
-
-if run_question:
-    if st.session_state.count >= MAX_QUESTIONS:
-        st.info("You've reached the 10 question limit for this visit. Refresh the page later to ask more.")
-    else:
-        st.session_state.count += 1
-        with st.spinner("Asking both assistants..."):
-            try:
-                st.session_state.result = run_comparison(run_question)
-            except Exception:
-                st.session_state.result = None
-                st.error("The search service is busy. Wait a minute, then ask again.")
-
-result = st.session_state.result
-if result:
-    st.markdown(f'<div class="asked"><strong>Your question:</strong> {html.escape(result["question"])}</div>',
-                unsafe_allow_html=True)
-    left, right = st.columns(2, gap="large")
-    with left:
-        render_panel("rag_panel", "LLM + RAG", "Product documents only", result["rag"], "What it read")
-    with right:
-        render_panel("kg_panel", "LLM + RAG + KG", "Documents plus knowledge graph", result["kg"],
-                     "What it read and queried")
-
-st.markdown("""
-<div class="how">
-  <h3>How it works</h3>
-  <div class="chain">
-    <span class="node">Lemsip Max Cold &amp; Flu</span>
-    <span class="edge">contains</span>
-    <span class="node risk">Paracetamol</span>
-    <span class="edge">which is also in</span>
-    <span class="node">Beechams All in One</span>
-  </div>
-  <p>Each product leaflet only describes its own product. Both assistants search the same leaflets, but the
-  right hand one can also follow a knowledge graph that links products to ingredients and ingredients to
-  warnings, so it can spot risks that sit across several leaflets.</p>
-</div>
-""", unsafe_allow_html=True)
-
-with st.expander("About this demo"):
-    st.markdown(
-        "Both assistants use the same Gemini model and receive the same three retrieved documents. "
-        "The only difference is the knowledge graph.\n\n"
-        "**Products covered:** Lemsip Max Cold & Flu Lemon, Lemsip Cold & Flu Lemon, Beechams All in One "
-        "(oral solution), Night Nurse, Nurofen Cold & Flu, Sudafed Decongestant Tablets, Paracetamol 500mg "
-        "Tablets, Ibuprofen 200mg Tablets, and the withdrawn Day Nurse Capsules.\n\n"
-        "**Sources:** official product information on the emc website, the NHS and the MHRA, checked by a "
-        "pharmacy graduate. Every fact in the graph carries its source and a confidence level.")
-
-st.caption("Built by Maureen Okoro, pharmacy graduate and MSc Data Science student, with Neo4j AuraDB, "
-           "Gemini and Streamlit. Inspired by the knowledge graph talk at DevFest Wales 2026. "
-           "Code: github.com/mauree155/cold-flu-graphrag")
+                    args = dict(fc.args or {})
+                    pending.setdefault(fc.name, []).append(args)
+                    calls.append(f"{fc.name}(" + ", ".join(f"{k}={v!r}" for k, v in args.items()) + ")")
+                fr = getattr(part, "function_response", None)
+                if fr:
+                    args = pending.get(fr.name, [{}]).pop(0) if pending.get(fr.name) else {}
+                    data = fr.response
+                    if
