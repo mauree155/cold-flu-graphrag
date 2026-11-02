@@ -422,7 +422,7 @@ def graph_html(edges):
     shared = {e["dst"] for e in edges if (e["kind"] or "").upper() == "SHARED"}
     row = 30
     n = max(len(c) for c in cols.values()) or 1
-    height = n * row + 20
+    height = n * row + 40
 
     def ypos(col, name):
         items = cols[col]
@@ -469,7 +469,7 @@ def graph_html(edges):
     for name in cols[2]:
         y = ypos(2, name)
         parts.append(f'<circle cx="555" cy="{y}" r="7" fill="#FFFFFF" stroke="{RED}" stroke-width="1.8"/>'
-                     f'<text x="568" y="{y + 4}" class="n2">{html.escape(short(name, 16))}</text>')
+                            f'<text x="568" y="{y + 4}" class="n2">{html.escape(short(name, 24))}</text>')
 
     return f"""
 <style>
@@ -486,7 +486,7 @@ body {{ margin: 0; font-family: 'Atkinson Hyperlegible', sans-serif; }}
 @keyframes fade {{ to {{ opacity: 1; }} }}
 @media (prefers-reduced-motion: reduce) {{ .draw {{ animation: none; stroke-dashoffset: 0; }} .fade {{ animation: none; opacity: 1; }} }}
 </style>
-<svg width="100%" viewBox="0 0 680 {height}" role="img" aria-label="Connections the knowledge graph followed">
+<svg width="100%" viewBox="0 0 740 {height}" role="img" aria-label="Connections the knowledge graph followed">
 {''.join(parts)}
 </svg>""", height
 
