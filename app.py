@@ -611,6 +611,13 @@ EXAMPLES = [
 
 if "turns" not in st.session_state:
     st.session_state.turns = []
+if "asked" not in st.session_state:
+    st.session_state.asked = 0
+
+if st.session_state.turns:
+    if st.columns([1, 3])[0].button("Start a new chat", key="new_chat"):
+        st.session_state.turns = []
+        st.rerun()
 
 question = None
 if not st.session_state.turns:
@@ -629,7 +636,7 @@ for turn in st.session_state.turns:
     render_turn(turn)
 
 if question:
-    if len(st.session_state.turns) >= MAX_QUESTIONS:
+    if st.session_state.asked >= MAX_QUESTIONS:
         st.info("You've reached the 10 question limit for this visit. Refresh the page later to ask more.")
     else:
         with st.spinner("Asking both assistants..."):
@@ -640,6 +647,7 @@ if question:
         if turn is None:
             st.error("The search service is busy. Wait a minute, then ask again.")
         else:
+            st.session_state.asked += 1
             st.session_state.turns.append(turn)
             st.rerun()
 
