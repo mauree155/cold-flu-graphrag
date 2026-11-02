@@ -1,71 +1,56 @@
-# Cold and Flu Checker: LLM + RAG vs LLM + RAG + Knowledge Graph
+# 💊 Cold and Flu Checker
 
-A side by side comparison of two AI assistants answering questions about common UK cold and flu remedies. One uses plain document search (RAG). The other also follows a knowledge graph linking products to ingredients, and ingredients to official warnings.
+**Two AI assistants. Same question. Same leaflets. One of them can follow the connections.**
 
-**Live demo:** https://cold-flu-graphrag.streamlit.app
+[![Live demo](https://img.shields.io/badge/Live_demo-Try_it-0E6B4F?style=for-the-badge&logo=streamlit&logoColor=white)](https://cold-flu-graphrag.streamlit.app)
 
-> Educational demo only, not medical advice. Always read the product leaflet and speak to a pharmacist or doctor.
+![The two assistants answering the high blood pressure question](screenshots/Trial_answer.png)
+![The graph connections behind the answer](screenshots/graph.png)
 
-## Why I built this
+## The problem
 
-Many cold and flu remedies share ingredients, so it is easy to double up on paracetamol, or take a decongestant you shouldn't with high blood pressure, without realising. Each product leaflet only describes its own product. The risk sits in the connections between them.
+Lots of cold and flu remedies share ingredients. It's easy to double up on paracetamol, or take a decongestant with high blood pressure, without realising. Each leaflet only talks about its own product, so the risk hides in the connections between them.
 
-The project was inspired by Chuka Ofili's talk on grounding Gemini with knowledge graphs at DevFest Wales 2026. I am a pharmacy graduate studying for an MSc in Data Science, so I chose a problem I know from the pharmacy counter.
+## The idea
 
-## How it works
+Ground Gemini in a knowledge graph of UK cold and flu products, then put it side by side with plain RAG and see what changes.
 
-**Knowledge graph (Neo4j AuraDB)**
-* 8 products, 7 ingredients, 6 ingredient classes, 4 conditions, plus one withdrawn product (Day Nurse Capsules, MHRA recall, March 2023)
-* Relationships include `CONTAINS`, `BELONGS_TO`, `CONTRAINDICATED_IN`, `CAUTION_IN`, `CAUSES`, `AFFECTS` and `AVOID_WITH`
-* Every relationship carries its **source** and a **confidence level** (high, medium or low), taken from official product information
+```mermaid
+graph LR
+  A[Lemsip Max] -->|contains| P((Paracetamol))
+  B[Beechams All in One] -->|contains| P
+  A -->|contains| F((Phenylephrine))
+  B -->|contains| F
+  F -->|contraindicated in| H[High blood pressure]
+```
 
-**Two pipelines, same model, same documents**
-* **LLM + RAG:** Gemini answers from the 3 product documents closest to the question, found by embedding search
-* **LLM + RAG + KG:** the same 3 documents, plus six graph query tools Gemini can call through function calling
+## The result
 
-The app also draws the exact graph connections behind each answer, built from what the graph actually returned.
+**"I have high blood pressure. Which of these should I avoid?"**
 
-## What I found
+| | Products found |
+|---|---|
+| LLM + RAG | 3 of 6 |
+| **LLM + RAG + Knowledge graph** | **6 of 6** |
 
-I tested both pipelines on 9 fixed questions, using the same model (gemini-3.1-flash-lite) and the same retrieved documents.
+On simple questions about one product, plain RAG did just as well. The graph earned its place on questions that cut across several products.
 
-| Question | LLM + RAG | LLM + RAG + KG |
-|---|---|---|
-| Lemsip Max with Beechams? | Correct | Correct |
-| Already had paracetamol, what to avoid? | Missed Beechams | Complete |
-| High blood pressure, what to avoid? | Found 3 of 6 | Found 6 of 6 |
-| Which products cause drowsiness? | Incomplete | Complete |
-| Driving after Night Nurse? | Correct | Correct |
-| Can a 14 year old take Night Nurse? | Correct | Correct |
-| Lemsip Max vs standard Lemsip? | Correct | Correct |
-| Nurofen Cold & Flu with Sudafed? | Understated the risk | Flagged the double decongestant |
-| What's in Day Nurse Capsules? | Withdrawn, no ingredients | Withdrawn, with ingredients |
+## What's inside
 
-**In short:** on questions about one or two products, plain RAG did just as well. The graph made the difference on questions that cut across several products, because RAG can only read a few documents at a time.
+* 8 UK products, their ingredients and official warnings from the emc, NHS and MHRA
+* Every fact carries its source and a confidence level
+* The app draws the exact graph connections behind each answer
 
-## Limitations
+**Built with:** Neo4j, Cypher, Python, Gemini and Streamlit
 
-* Small scale: 8 products, chosen to demonstrate the approach
-* RAG retrieves 3 documents. With only 9 documents, retrieving more would help RAG, but real catalogues hold thousands, so a limit always exists
-* Product names are matched by text, so unusual names may not be found. Node embeddings would be the next improvement
-* The graph does not track doses already taken or timing between doses
-
-## Data sources
-
-Official product information from the [emc](https://www.medicines.org.uk/emc), the NHS medicines pages and the MHRA. Product summaries are written in my own words from these sources.
-
-## Tech stack
-
-Neo4j AuraDB, Cypher, Python, Gemini API (google-genai), Gemini embeddings, Streamlit
-
-## Run it locally
+## Run it yourself
 
 1. `pip install -r requirements.txt`
-2. Create `.streamlit/secrets.toml` with `GEMINI_API_KEY`, `NEO4J_URI`, `NEO4J_USERNAME` and `NEO4J_PASSWORD`
-3. Load the graph into your Neo4j instance using `graph_setup.cypher`
+2. Load `graph_setup.cypher` into an empty Neo4j database
+3. Add your Gemini and Neo4j keys to `.streamlit/secrets.toml`
 4. `streamlit run app.py`
 
-## Author
+---
 
-Maureen Okoro, pharmacy graduate and MSc Data Science student at the University of South Wales.
-[LinkedIn](https://www.linkedin.com/in/maureenokoro-analytics) 
+Built by [Maureen Okoro](https://www.linkedin.com/in/maureenokoro-analytics), pharmacy graduate and MSc Data Science student, after Chuka Ofili's knowledge graph talk at DevFest Wales 2026.
+*Educational demo, not medical advice.*
